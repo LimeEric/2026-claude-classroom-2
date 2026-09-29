@@ -22,7 +22,8 @@ AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra 
 
 ## App code — `app/layout.tsx`, `app/page.tsx`, `components/`
 
-- `PageProps<'/route'>` and `LayoutProps<'/route'>` are globals generated into `.next/types`, so a typecheck on a clean checkout fails until `next dev` or `next build` has run once.
+- `PageProps<'/route'>` and `LayoutProps<'/route'>` are globals generated into `.next/types`, so a typecheck on a clean checkout fails until `next typegen`, `next dev`, or `next build` has run once.
+- TypeScript 7 ships no JavaScript compiler API, so `next build` type-checks through the project-local `tsc` CLI (`experimental.useTypeScriptCli`, on by default) — never turn that off — and the `next` plugin in `tsconfig.json` does nothing under TS 7.
 - Import across the repo with the `@/*` alias (rooted at this directory), not deep relative paths.
 - `components/ui/` holds the presentational primitives (`auth-card`, `field`, `button`, `form-error`, `page-header`); extend one instead of repeating its class string.
 - `/` is the chat page: a Server Component that gates on the session, then renders `PageHeader` plus the client-only `components/chat.tsx`.
@@ -41,6 +42,7 @@ AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra 
 - `lib/auth.ts` is the app instance (`server-only` via `lib/db.ts`, `nextCookies()` last); `lib/auth-cli.ts` exists only because the Better Auth CLI refuses to load a module graph containing `server-only`.
 - Gate pages server-side with `auth.api.getSession({ headers: await headers() })` and `redirect()`; there is deliberately no `proxy.ts`, whose cookie check would not validate anything.
 - Email/password only: adding a provider or plugin means re-running `auth:generate` and the migration flow.
+- Better Auth checks `lib/auth-schema.ts` against its own model on startup and throws `Drizzle schema mismatch` on drift, so a Better Auth upgrade can need the same `auth:generate` + migration flow.
 
 ## Agent — `lib/tutor.ts`, `components/chat.tsx`, `app/api/copilotkit/[...all]/`
 
@@ -51,12 +53,13 @@ AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra 
 - The route builds the AG-UI bridge per request with `MastraAgent.getLocalAgent({ resourceId: session.user.id })`, so memory is scoped by the verified user id and never by anything in the request.
 - Thread ids are `tutor:<userId>` (`tutorThreadId`), rendered into the page from the session so a reload rejoins the same conversation; a forged one fails on Mastra's `AGENT_MEMORY_THREAD_RESOURCE_MISMATCH`, which is what actually keeps user A out of user B's thread.
 - The route answers 401 before touching Mastra, and that is the only auth gate — the runtime endpoint is otherwise public.
-- Use `createCopilotRuntimeHandler` from `@copilotkit/runtime/v2`; the package's own `skills/runtime/` docs flag the Express and Hono adapters as "avoid at all costs".
+- Use `createCopilotRuntimeHandler` from `@copilotkit/runtime/v2`, the fetch handler a route can return directly, not its Express or Hono adapters.
 - `@copilotkit/react-core/v2` is the whole client surface (`CopilotKit`, `CopilotChat`, `styles.css`) — `@copilotkit/react-ui` and the package roots are v1 and do not work with it.
-- The CopilotKit Inspector is on by default in development (`enableInspector` stays unset; `showDevConsole` is deprecated and controls nothing). Its `<cpk-web-inspector>` launcher would sit on the header's sign-out button, so `app/globals.css` shifts the host down with a margin.
+- The CopilotKit Inspector is on by default in development on localhost (`enableInspector` stays unset; `showDevConsole` is deprecated and no longer controls it). Its `<cpk-web-inspector>` launcher would sit on the header's sign-out button, so `app/globals.css` shifts the host down with a margin.
 - `OPENROUTER_BASE_URL` (optional, see `.env.example`) routes the model traffic through a local proxy; with a custom `url` Mastra's model router no longer reads `OPENROUTER_API_KEY` itself, which is why `lib/tutor.ts` passes `apiKey` explicitly.
 - Threads only persist inside Mastra's memory — the runtime runs on the default `InMemoryAgentRunner`, so the browser's own transcript still starts empty on reload.
-- `@copilotkit/runtime` drags in a zod-3 dependency tree that conflicts with Better Auth's zod 4, hence `.npmrc`'s `legacy-peer-deps=true`; drop it and `npm install` fails.
+- `@copilotkit/runtime` and `@ag-ui/mastra` drag in a zod-3 tree beside Better Auth's zod 4; npm nests it and prints two expected `ERESOLVE overriding peer dependency` warnings.
+- `@ag-ui/client`/`core` stay on the `0.0.59` that CopilotKit pins exactly, because a 1.x copy for `@ag-ui/mastra` makes `MastraAgent` fail to typecheck against `CopilotRuntime` — move them only with a CopilotKit release on AG-UI 1.x.
 
 ## Tests — `tests/unit` (Vitest), `tests/e2e` (Playwright)
 

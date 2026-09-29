@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 // Both are `server-only` and open a database on import, so the gate is tested
 // against stand-ins; only the branch before them is under test here.
@@ -25,10 +25,6 @@ const runRequest = () =>
   });
 
 describe("the CopilotKit route", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   test("rejects a request without a session and never reaches the agent", async () => {
     getSession.mockResolvedValue(null);
 
