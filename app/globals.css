@@ -1,6 +1,13 @@
 @import "tailwindcss";
 
 :root {
+  /*
+   * Light only, whatever the OS prefers: nothing here reacts to
+   * prefers-color-scheme, and CopilotKit's own dark theme keys on a `.dark`
+   * class that nothing sets. `color-scheme` keeps native controls and
+   * scrollbars light too.
+   */
+  color-scheme: light;
   --background: #ffffff;
   --foreground: #171717;
 }
@@ -10,13 +17,6 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {

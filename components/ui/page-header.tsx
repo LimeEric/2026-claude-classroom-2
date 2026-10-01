@@ -11,15 +11,13 @@ export function PageHeader({
   children?: ReactNode;
 }) {
   return (
-    <header className="flex items-center justify-between gap-4 border-b border-zinc-200 bg-white px-6 py-3 dark:border-zinc-800 dark:bg-zinc-950">
+    <header className="flex items-center justify-between gap-4 border-b border-zinc-200 bg-white px-6 py-3">
       <div className="flex min-w-0 flex-col">
-        <span className="truncate text-sm font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+        <span className="truncate text-sm font-semibold tracking-tight text-zinc-900">
           {title}
         </span>
         {subtitle ? (
-          <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">
-            {subtitle}
-          </span>
+          <span className="truncate text-xs text-zinc-500">{subtitle}</span>
         ) : null}
       </div>
       {children}

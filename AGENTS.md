@@ -26,7 +26,7 @@ AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra 
 - TypeScript 7 ships no JavaScript compiler API, so `next build` type-checks through the project-local `tsc` CLI (`experimental.useTypeScriptCli`, on by default) — never turn that off — and the `next` plugin in `tsconfig.json` does nothing under TS 7.
 - Import across the repo with the `@/*` alias (rooted at this directory), not deep relative paths.
 - `components/ui/` holds the presentational primitives (`auth-card`, `field`, `button`, `form-error`, `page-header`); extend one instead of repeating its class string.
-- `/` is the chat page: a Server Component that gates on the session, then renders `PageHeader` plus the client-only `components/chat.tsx`.
+- `/` is the chat page: a Server Component that gates on the session, then renders `PageHeader` plus the client-only `components/chat.tsx` in an `h-dvh` frame, because `body` is only `min-h-full` and a `flex-1` chat would otherwise grow the page instead of scrolling inside itself.
 
 ## Persistence — `lib/db.ts`, `lib/schema.ts`, `lib/auth-schema.ts`, `drizzle.config.ts`, `drizzle/`
 
@@ -76,6 +76,7 @@ AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra 
 ## Styling — `app/globals.css`, `postcss.config.mjs`
 
 - Tailwind v4 has no `tailwind.config.*`; design tokens live in the `@theme inline` block of `globals.css`.
+- The app is light only (`color-scheme: light`, no `dark:` variants, no `prefers-color-scheme` rule), and CopilotKit's own dark theme keys on a `.dark` class that nothing sets.
 - The `body` rule in `globals.css` applies `--font-geist-sans` globally, so reach for a `font-mono` utility only where the mono face is actually wanted.
 
 ## Secrets — `.env`

@@ -12,17 +12,19 @@ export default async function Home() {
     redirect("/login");
   }
 
+  // A fixed viewport-high frame, so a long transcript scrolls inside the chat
+  // instead of growing the page under the header.
   return (
-    <>
+    <div className="flex h-dvh flex-col">
       <PageHeader title="Bartholomew" subtitle={session.user.name}>
         <SignOutButton />
       </PageHeader>
-      <main className="flex-1 overflow-hidden bg-zinc-50 dark:bg-black">
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <Chat
           agentId={TUTOR_AGENT_ID}
           threadId={tutorThreadId(session.user.id)}
         />
       </main>
-    </>
+    </div>
   );
 }
