@@ -10,84 +10,66 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # ai-tutor
 
-AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra agent served to a CopilotKit chat over AG-UI, behind Better Auth email/password sign-in, over a Drizzle/SQLite persistence layer, with a Vitest + Playwright test harness.
+A to-do list kept by Bartholomew, a chat butler the code calls the tutor: a Mastra agent behind a CopilotKit chat, Better Auth, and Drizzle over SQLite.
 
-## Commands
+## Setup and commands
 
-- `npm run dev` / `npm run build` / `npm run start`.
-- `npm run lint` is `biome check` and `npm run format` is `biome format --write` — Biome only, so never add ESLint or Prettier config.
-- `npm test` (Vitest, single run), `npm run test:watch`, `npm run test:e2e` (Playwright).
-- `npm run db:generate` writes a migration from the schema and `npm run db:migrate` applies it to `DATABASE_URL`.
-- `npm run auth:generate` regenerates `lib/auth-schema.ts` from the Better Auth config; follow it with `db:generate` + `db:migrate`.
+- First run: `npm install`, `cp .env.example .env` and fill it in, `npm run db:migrate`, and `npx playwright install chromium` before any e2e run.
+- The two `ERESOLVE overriding peer dependency` warnings from `npm install` are expected (a nested zod-3 tree).
+- Typecheck with `npx next typegen && npx tsc --noEmit`, since `PageProps`/`LayoutProps` are globals generated into `.next/types`.
+- Before committing, `npm run lint`, the typecheck, and `npm test` pass.
+- Biome only, so never add ESLint or Prettier config; `npm run format` skips import sorting, which `npx biome check --write <path>` applies.
 
-## App code — `app/layout.tsx`, `app/page.tsx`, `components/`
+## App — `app/`, `components/`
 
-- `PageProps<'/route'>` and `LayoutProps<'/route'>` are globals generated into `.next/types`, so a typecheck on a clean checkout fails until `next typegen`, `next dev`, or `next build` has run once.
-- TypeScript 7 ships no JavaScript compiler API, so `next build` type-checks through the project-local `tsc` CLI (`experimental.useTypeScriptCli`, on by default) — never turn that off — and the `next` plugin in `tsconfig.json` does nothing under TS 7.
-- Import across the repo with the `@/*` alias (rooted at this directory), not deep relative paths.
-- `components/ui/` holds the presentational primitives (`auth-card`, `field`, `button`, `form-error`, `page-header`); extend one instead of repeating its class string.
-- `/` is the chat page: a Server Component that gates on the session, then renders `PageHeader` plus the client-only `components/chat.tsx` in an `h-dvh` frame, because `body` is only `min-h-full` and a `flex-1` chat would otherwise grow the page instead of scrolling inside itself.
+- Pages are `/` (the chat), `/login`, and `/signup`.
+- Import with the `@/*` alias, and extend a primitive in `components/ui/` instead of repeating its class string.
+- TypeScript 7 has no JS compiler API, so never turn off `experimental.useTypeScriptCli`, and the `next` plugin in `tsconfig.json` is inert.
+- Tailwind v4 has no `tailwind.config.*`; tokens live in the `@theme inline` block of `app/globals.css`.
+- The app is light only: no `dark:` variants, no `prefers-color-scheme` rule, and nothing sets the `.dark` class CopilotKit's dark theme keys on.
 
-## Persistence — `lib/db.ts`, `lib/schema.ts`, `lib/auth-schema.ts`, `drizzle.config.ts`, `drizzle/`
+## Persistence — `lib/db.ts`, `lib/schema.ts`, `drizzle/`
 
-- `lib/db.ts` is `server-only` and the single place that opens the database; import `db` from it rather than constructing another `drizzle()`.
-- Table definitions live in `lib/schema.ts` so drizzle-kit and tests can import them without tripping the `server-only` marker.
-- `lib/auth-schema.ts` is overwritten wholesale by `auth:generate`, so app tables belong in `lib/schema.ts`, which re-exports it as the one entry point drizzle-kit and the Drizzle adapter read.
-- The driver is `drizzle-orm/libsql/node` over a `file:` URL, and drizzle-kit picks `@libsql/client` on its own — do not install `better-sqlite3`.
-- `drizzle/` is generated (edit the schema and re-run `db:generate`), and the SQLite file under the git-ignored `data/` is disposable — recreate it with `db:migrate`.
+- Import `db` from `lib/db.ts` rather than constructing another `drizzle()`.
+- App tables go in `lib/schema.ts`, because `lib/auth-schema.ts` is overwritten wholesale by `auth:generate`.
+- A schema change is `npm run db:generate` + `npm run db:migrate`; `drizzle/` is generated and `data/app.db` is disposable.
+- The driver is libSQL, so do not install `better-sqlite3`.
+- Mastra creates and owns `mastra_*` tables in the same SQLite file; keep them out of `lib/schema.ts`.
+- The `todos` table is the list: the agent writes it only through the tools in `lib/todos.ts`, and the sidebar only reads it.
 
-## Auth — `lib/auth.ts`, `lib/auth-config.ts`, `lib/auth-client.ts`, `app/api/auth/[...all]/`
+## Auth — `lib/auth.ts`, `lib/auth-cli.ts`, `lib/auth-config.ts`
 
-- `lib/auth-config.ts` exports `authOptions(db)` and every entry point spreads it with its own literal `plugins` array — Better Auth only infers plugin helpers such as `ctx.test` from literal arrays.
-- `lib/auth.ts` is the app instance (`server-only` via `lib/db.ts`, `nextCookies()` last); `lib/auth-cli.ts` exists only because the Better Auth CLI refuses to load a module graph containing `server-only`.
-- Gate pages server-side with `auth.api.getSession({ headers: await headers() })` and `redirect()`; there is deliberately no `proxy.ts`, whose cookie check would not validate anything.
-- Email/password only: adding a provider or plugin means re-running `auth:generate` and the migration flow.
-- Better Auth checks `lib/auth-schema.ts` against its own model on startup and throws `Drizzle schema mismatch` on drift, so a Better Auth upgrade can need the same `auth:generate` + migration flow.
+- `lib/auth.ts` (the app instance, `nextCookies()` last) and `lib/auth-cli.ts` (the CLI target, since the Better Auth CLI refuses `server-only`) both spread `authOptions(db)`, and `plugins` must stay a literal array or Better Auth stops inferring plugin helpers.
+- A new plugin or provider goes into both entry points, then `npm run auth:generate` → `db:generate` → `db:migrate`, or startup throws `Drizzle schema mismatch`.
+- `auth:generate` runs `npx auth@latest` rather than the installed `better-auth`, and a Better Auth upgrade needs the same generate-and-migrate flow.
+- Gate pages server-side with `auth.api.getSession({ headers: await headers() })` + `redirect()`; there is deliberately no `proxy.ts`.
 
-## Agent — `lib/tutor.ts`, `components/chat.tsx`, `app/api/copilotkit/[...all]/`
+## Agent — `lib/tutor.ts`, `lib/todos.ts`, `components/`, `app/api/copilotkit/[...all]/`
 
-- `lib/tutor.ts` is the whole agent: one `Agent` (`TUTOR_AGENT_ID`, a butler who only keeps the user's to-do list) on `openrouter/z-ai/glm-5.3-flash`, held on a `Mastra` instance.
-- The `LibSQLStore` is cached on `globalThis` the way `lib/db.ts` caches its connection, but in development the `Mastra` instance around it is rebuilt on every module evaluation so a hot reload picks up edited instructions; production caches the instance too.
-- Mastra's model router reads `OPENROUTER_API_KEY` itself, so no AI SDK provider package is installed and the model string keeps its `provider/vendor/model` shape.
-- Memory is `@mastra/memory` over a `LibSQLStore` on `DATABASE_URL`; the same store is passed to the `Mastra` instance too, or it warns and silently falls back to a non-durable in-memory one.
-- Mastra creates and owns its `mastra_*` tables in that file — they are not in `lib/schema.ts` and `db:generate` must not try to manage them.
-- The route builds the AG-UI bridge per request with `MastraAgent.getLocalAgent({ resourceId: session.user.id })`, so memory is scoped by the verified user id and never by anything in the request.
-- Thread ids are `tutor:<userId>` (`tutorThreadId`), rendered into the page from the session so a reload rejoins the same conversation; a forged one fails on Mastra's `AGENT_MEMORY_THREAD_RESOURCE_MISMATCH`, which is what actually keeps user A out of user B's thread.
-- The route answers 401 before touching Mastra, and that is the only auth gate — the runtime endpoint is otherwise public.
-- Use `createCopilotRuntimeHandler` from `@copilotkit/runtime/v2`, the fetch handler a route can return directly, not its Express or Hono adapters.
-- `@copilotkit/react-core/v2` is the whole client surface (`CopilotKit`, `CopilotChat`, `styles.css`) — `@copilotkit/react-ui` and the package roots are v1 and do not work with it.
-- The CopilotKit Inspector is on by default in development on localhost (`enableInspector` stays unset; `showDevConsole` is deprecated and no longer controls it). Its `<cpk-web-inspector>` launcher would sit on the header's sign-out button, so `app/globals.css` shifts the host down with a margin.
-- `OPENROUTER_BASE_URL` (optional, see `.env.example`) routes the model traffic through a local proxy; with a custom `url` Mastra's model router no longer reads `OPENROUTER_API_KEY` itself, which is why `lib/tutor.ts` passes `apiKey` explicitly.
-- Threads only persist inside Mastra's memory — the runtime runs on the default `InMemoryAgentRunner`, so the browser's own transcript still starts empty on reload.
-- `@copilotkit/runtime` and `@ag-ui/mastra` drag in a zod-3 tree beside Better Auth's zod 4; npm nests it and prints two expected `ERESOLVE overriding peer dependency` warnings.
-- `@ag-ui/client`/`core` stay on the `0.0.59` that CopilotKit pins exactly, because a 1.x copy for `@ag-ui/mastra` makes `MastraAgent` fail to typecheck against `CopilotRuntime` — move them only with a CopilotKit release on AG-UI 1.x.
+- The route is the only security boundary: it answers 401 without a session and takes both `resourceId` and the tools' `RequestContext` `userId` from `session.user.id`, never from the request or tool input.
+- The sidebar is a Server Component that `components/todo-refresher.tsx` re-renders with `router.refresh()` after a write tool's result.
+- A new tool takes its schemas from the client-safe `lib/todo-schemas.ts`, gets a card in `components/tool-calls.tsx`, and, if it writes, joins `WRITE_TOOLS` in the refresher.
+- Use only the `/v2` entry points of `@copilotkit/react-core` and `@copilotkit/runtime`; `@copilotkit/react-ui` and the package roots are v1.
+- `@ag-ui/client`/`core` stay on the `0.0.59` CopilotKit pins exactly; move them only with a CopilotKit release on AG-UI 1.x.
+- The browser transcript starts empty on reload (the runtime's default `InMemoryAgentRunner`), while the thread itself persists in Mastra memory.
 
 ## Tests — `tests/unit` (Vitest), `tests/e2e` (Playwright)
 
-- Vitest is jsdom + Testing Library and only picks up `tests/unit/**/*.test.{ts,tsx}`; async Server Components are unsupported there, so cover those with e2e instead.
-- `vitest.config.mts` resolves `@/*` through `resolve.tsconfigPaths` — the `vite-tsconfig-paths` plugin the Next.js guide recommends is deprecated, so don't reinstall it.
-- Playwright runs Chromium only against its own `next dev` on port 3100 (override with `E2E_PORT`).
-- `next dev` refuses to start twice against one dist dir, so `next.config.ts` reads `NEXT_DIST_DIR` and the e2e server sets it to `.next-e2e`; that dir also needs a `tsconfig.json` include entry, which `next dev` adds itself.
-- `tests/unit/db.test.ts`, `auth.test.ts`, and `tutor.test.ts` opt out of jsdom with a `// @vitest-environment node` first line and use a temp database file, so they never touch `data/app.db`.
-- The auth test builds its own instance from `authOptions` with the `testUtils()` plugin and an explicit `secret`/`baseURL`, because Vitest does not load `.env`.
-- `tests/e2e/auth.spec.ts` does hit `data/app.db`, so it signs up a `Date.now()`-stamped email; `playwright.config.ts` also overrides `BETTER_AUTH_URL` onto its own port.
-- `tests/unit/copilotkit-route.test.ts` mocks `@/lib/auth`, `@/lib/tutor`, and both CopilotKit/AG-UI modules, so it covers the 401 gate and the `resourceId` wiring without a model call; nothing in the suite calls OpenRouter.
+- Vitest only picks up `tests/unit/**/*.test.{ts,tsx}` and cannot render async Server Components, so cover those in e2e.
+- Don't reinstall the deprecated `vite-tsconfig-paths`; `resolve.tsconfigPaths` replaces it.
+- Vitest inlines `@copilotkit/*` (`server.deps.inline`), because its v2 entry imports a stylesheet Node cannot load.
+- Vitest does not load `.env`, so database tests run under `// @vitest-environment node` on a temp file, and nothing in the suite calls OpenRouter.
+- E2e specs write to `data/app.db`, so sign up with a `Date.now()`-stamped email.
+- `*.llm.spec.ts` call the real model and run only under `npm run test:e2e:llm`, never in `test:e2e`.
+- Wait for `copilot-send-button` to be enabled before sending, because input submitted before the chat connects is silently dropped.
 
-## Styling — `app/globals.css`, `postcss.config.mjs`
+## Skills — `.claude/skills/`
 
-- Tailwind v4 has no `tailwind.config.*`; design tokens live in the `@theme inline` block of `globals.css`.
-- The app is light only (`color-scheme: light`, no `dark:` variants, no `prefers-color-scheme` rule), and CopilotKit's own dark theme keys on a `.dark` class that nothing sets.
-- The `body` rule in `globals.css` applies `--font-geist-sans` globally, so reach for a `font-mono` utility only where the mono face is actually wanted.
+- Vendored CopilotKit, Mastra, and `find-docs` skills, pinned in `skills-lock.json`; load the matching one before touching those APIs.
 
 ## Secrets — `.env`
 
-- Holds `DATABASE_URL` (SQLite, read by both `lib/db.ts` and drizzle-kit, which loads `.env` itself), `BETTER_AUTH_SECRET`/`BETTER_AUTH_URL` read by Better Auth itself, and `OPENROUTER_API_KEY`, which Mastra's model router reads directly.
-- `.gitignore` covers `.env*`; never commit the file or print its values.
-
-## Tooling — `biome.json`
-
-- Biome ignores `.claude/` because its vendored skill assets fail `biome check .`, and `drizzle/` because drizzle-kit's generated JSON does not match its formatter.
-- `npm run format` skips assist actions such as import sorting; use `npx biome check --write <path>` to fix those.
+- `.env.example` lists every variable; `.env` is git-ignored, so never commit it or print its values.
 
 ## Maintenance — for you, the agent
 

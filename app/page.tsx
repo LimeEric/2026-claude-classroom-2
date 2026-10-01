@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Chat } from "@/components/chat";
 import { SignOutButton } from "@/components/sign-out-button";
+import { TodoSidebar } from "@/components/todo-sidebar";
 import { PageHeader } from "@/components/ui/page-header";
 import { auth } from "@/lib/auth";
 import { TUTOR_AGENT_ID, tutorThreadId } from "@/lib/tutor";
@@ -23,7 +24,9 @@ export default async function Home() {
         <Chat
           agentId={TUTOR_AGENT_ID}
           threadId={tutorThreadId(session.user.id)}
-        />
+        >
+          <TodoSidebar userId={session.user.id} />
+        </Chat>
       </main>
     </div>
   );

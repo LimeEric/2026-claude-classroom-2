@@ -1,5 +1,7 @@
 // @vitest-environment node
+import type { RequestContext } from "@mastra/core/request-context";
 import { describe, expect, test, vi } from "vitest";
+import type { TutorRequestContext } from "@/lib/todos";
 
 // Both are `server-only` and open a database on import, so the gate is tested
 // against stand-ins; only the branch before them is under test here.
@@ -72,5 +74,16 @@ describe("the CopilotKit route", () => {
     expect(getLocalAgent).toHaveBeenCalledWith(
       expect.objectContaining({ resourceId: "user-b" }),
     );
+  });
+
+  test("hands the todo tools the session's user id on the RequestContext", async () => {
+    getSession.mockResolvedValue({ user: { id: "user-c" } });
+
+    await POST(runRequest());
+
+    const [options] = getLocalAgent.mock.lastCall as unknown as [
+      { requestContext: RequestContext<TutorRequestContext> },
+    ];
+    expect(options.requestContext.get("userId")).toBe("user-c");
   });
 });

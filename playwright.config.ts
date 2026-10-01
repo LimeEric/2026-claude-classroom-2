@@ -4,9 +4,14 @@ import { defineConfig, devices } from "@playwright/test";
 // `localhost` (not 127.0.0.1) keeps the dev server's cross-origin HMR check quiet.
 const PORT = Number(process.env.E2E_PORT ?? 3100);
 const baseURL = `http://localhost:${PORT}`;
+// `*.llm.spec.ts` drive the real model and cost OpenRouter calls, so they run
+// only under `npm run test:e2e:llm`, which sets this, and never by default.
+const llm = process.env.E2E_LLM === "1";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  testMatch: llm ? "**/*.llm.spec.ts" : "**/*.spec.ts",
+  testIgnore: llm ? [] : "**/*.llm.spec.ts",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
